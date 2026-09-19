@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartLog — Centralized Log & Anomaly Monitor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="p-6">
+
+<!-- Top Navigation Header -->
+<header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-800">
+    <div>
+        <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+            <span class="inline-block w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
+            SmartLog Dashboard
+        </h1>
+        <p class="text-slate-400 text-sm">Real-time Distributed Log Analytics & Anomaly Detection</p>
+    </div>
+    <div id="connectionStatus" class="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+        <span class="w-2 h-2 rounded-full bg-yellow-400 animate-ping"></span>
+        Connecting to Backend...
+    </div>
+</header>
+
+<!-- Anomaly Alert Banner (Hidden by Default) -->
+<div id="anomalyBanner" class="hidden mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <span class="text-xl">🚨</span>
+        <div>
+            <h3 class="font-bold text-sm uppercase tracking-wide">Anomaly Spike Detected</h3>
+            <p id="anomalyMessage" class="text-xs text-red-300">High error volume observed across services.</p>
+        </div>
+    </div>
+    <button onclick="dismissAlert()" class="text-xs text-red-400 hover:text-white underline">Dismiss</button>
+</div>
+
+<!-- Top Metrics Overview -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-slate-400 text-xs font-medium">TOTAL LOGS</span>
+        <div id="metricTotalLogs" class="text-2xl font-bold text-white mt-1">0</div>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-slate-400 text-xs font-medium">TOTAL ERRORS</span>
+        <div id="metricTotalErrors" class="text-2xl font-bold text-red-400 mt-1">0</div>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-slate-400 text-xs font-medium">ACTIVE SERVICES</span>
+        <div id="metricActiveServices" class="text-2xl font-bold text-blue-400 mt-1">0</div>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-slate-400 text-xs font-medium">SYSTEM STATUS</span>
+        <div id="metricSystemStatus" class="text-lg font-bold text-emerald-400 mt-2">HEALTHY</div>
+    </div>
+</div>
+
+<!-- Analytics & Control Panel Section -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+
+    <!-- Live Log Simulator Form -->
+    <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+        <h2 class="text-base font-semibold mb-4 text-white">Ingest Test Log</h2>
+        <form id="logForm" onsubmit="handleSendLog(event)" class="space-y-3">
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Service Name</label>
+                <select id="inputService" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <option value="user-service">user-service</option>
+                    <option value="payment-service">payment-service</option>
+                    <option value="auth-service">auth-service</option>
+                    <option value="notification-service">notification-service</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Log Level</label>
+                <select id="inputLevel" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                    <option value="INFO">INFO</option>
+                    <option value="WARN">WARN</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Log Message</label>
+                <input type="text" id="inputMessage" placeholder="e.g. Database connection failed" required class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm text-white focus:outline-none focus:border-blue-500">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm py-2 rounded-lg transition">
+                Send Log
+            </button>
+        </form>
+        <hr class="border-slate-800 my-4">
+        <button onclick="triggerErrorSpike()" class="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 font-medium text-xs py-2 rounded-lg transition">
+            ⚡ Simulate Error Spike (5 Rapid Errors)
+        </button>
+    </div>
+
+    <!-- Log Distribution Chart -->
+    <div class="lg:col-span-2 bg-slate-900 border border-slate-800 p-5 rounded-xl flex flex-col justify-between">
+        <h2 class="text-base font-semibold mb-2 text-white">Log Level Breakdown</h2>
+        <div class="relative h-52 w-full">
+            <canvas id="logChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Live Logs Data Table -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="p-4 border-b border-slate-800 flex justify-between items-center">
+        <h2 class="text-base font-semibold text-white">Live Ingested Logs</h2>
+        <input type="text" id="tableFilter" onkeyup="renderTable()" placeholder="Filter logs by keyword..." class="bg-slate-800 border border-slate-700 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none">
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-950 text-slate-400 uppercase font-mono border-b border-slate-800">
+            <tr>
+                <th class="p-3">ID</th>
+                <th class="p-3">Timestamp</th>
+                <th class="p-3">Service</th>
+                <th class="p-3">Level</th>
+                <th class="p-3">Message</th>
+            </tr>
+            </thead>
+            <tbody id="logsTableBody" class="divide-y divide-slate-800">
+            <tr>
+                <td colspan="5" class="p-6 text-center text-slate-500">No log entries found. Submit a new log using the simulator.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- JavaScript Engine -->
+<script>
+    const API_BASE_URL = 'http://localhost:8080/api/v1/logs';
+
+    // Start with clean empty state
+    let logs = [];
+    let chartInstance = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initChart();
+        fetchLogsFromBackend();
+        // Poll for fresh backend data every 3 seconds
+        setInterval(fetchLogsFromBackend, 3000);
+    });
+
+    // 1. Fetch live data from Spring Boot API
+    async function fetchLogsFromBackend() {
+        try {
+            const response = await fetch(API_BASE_URL);
+            if (response.ok) {
+                const data = await response.json();
+
+                // Map Spring Boot entities to JS objects
+                logs = data.map(item => ({
+                    id: item.id,
+                    service: item.serviceName,
+                    level: item.logLevel,
+                    message: item.message,
+                    timestamp: item.createdAt
+                }));
+
+                updateConnectionStatus(true);
+                updateDashboardMetrics();
+                renderTable();
+                updateChart();
+            }
+        } catch (error) {
+            updateConnectionStatus(false);
+        }
+    }
+
+    // 2. Submit single log via Form
+    async function handleSendLog(event) {
+        event.preventDefault();
+        const service = document.getElementById('inputService').value;
+        const level = document.getElementById('inputLevel').value;
+        const message = document.getElementById('inputMessage').value;
+
+        const payload = { service, level, message };
+
+        try {
+            const response = await fetch(API_BASE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                document.getElementById('inputMessage').value = '';
+
+                // Check if response triggered an anomaly alert
+                if (result.anomalyDetected) {
+                    showAlert(result.alertMessage || `Spike detected in ${service}!`);
+                }
+
+                fetchLogsFromBackend();
+            }
+        } catch (err) {
+            console.error('Error posting log:', err);
+        }
+    }
+
+    // 3. Trigger Error Spike Simulation
+    async function triggerErrorSpike() {
+        const service = document.getElementById('inputService').value;
+        for (let i = 0; i < 5; i++) {
+            await fetch(API_BASE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    service: service,
+                    level: 'ERROR',
+                    message: `Automated anomaly spike event #${i + 1}`
+                })
+            });
+        }
+        fetchLogsFromBackend();
+    }
+
+    // 4. Update UI Overview Metrics
+    function updateDashboardMetrics() {
+        const total = logs.length;
+        const errors = logs.filter(l => l.level === 'ERROR' || l.level === 'CRITICAL').length;
+        const services = new Set(logs.map(l => l.service)).size;
+
+        document.getElementById('metricTotalLogs').innerText = total;
+        document.getElementById('metricTotalErrors').innerText = errors;
+        document.getElementById('metricActiveServices').innerText = services;
+
+        const statusEl = document.getElementById('metricSystemStatus');
+        if (errors > 5) {
+            statusEl.innerText = 'HIGH ERROR RATE';
+            statusEl.className = 'text-lg font-bold text-red-500';
+        } else {
+            statusEl.innerText = 'HEALTHY';
+            statusEl.className = 'text-lg font-bold text-emerald-400';
+        }
+    }
+
+    // 5. Render Logs Table
+    function renderTable() {
+        const tbody = document.getElementById('logsTableBody');
+        const filterText = document.getElementById('tableFilter').value.toLowerCase();
+
+        const filteredLogs = logs.filter(l =>
+            l.service.toLowerCase().includes(filterText) ||
+            l.level.toLowerCase().includes(filterText) ||
+            l.message.toLowerCase().includes(filterText)
+        );
+
+        if (filteredLogs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500">No matching log entries found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filteredLogs.map(l => {
+            let badgeStyle = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+            if (l.level === 'WARN') badgeStyle = 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
+            if (l.level === 'ERROR' || l.level === 'CRITICAL') badgeStyle = 'bg-red-500/10 text-red-400 border-red-500/20';
+
+            const timeStr = l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : 'N/A';
+
+            return `
+                <tr class="hover:bg-slate-800/50">
+                    <td class="p-3 font-mono text-slate-500">#${l.id}</td>
+                    <td class="p-3 text-slate-400">${timeStr}</td>
+                    <td class="p-3 font-semibold text-slate-200">${l.service}</td>
+                    <td class="p-3">
+                        <span class="px-2 py-0.5 rounded border text-[10px] font-bold ${badgeStyle}">${l.level}</span>
+                    </td>
+                    <td class="p-3 text-slate-300">${l.message}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // 6. Initialize & Update Chart.js Breakdown
+    function initChart() {
+        const ctx = document.getElementById('logChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['INFO', 'WARN', 'ERROR', 'CRITICAL'],
+                datasets: [{
+                    label: 'Log Counts',
+                    data: [0, 0, 0, 0],
+                    backgroundColor: ['#3b82f6', '#eab308', '#ef4444', '#9333ea'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+                    x: { grid: { display: false }, ticks: { color: '#64748b' } }
+                }
+            }
+        });
+    }
+
+    function updateChart() {
+        if (!chartInstance) return;
+        const counts = {
+            'INFO': logs.filter(l => l.level === 'INFO').length,
+            'WARN': logs.filter(l => l.level === 'WARN').length,
+            'ERROR': logs.filter(l => l.level === 'ERROR').length,
+            'CRITICAL': logs.filter(l => l.level === 'CRITICAL').length
+        };
+        chartInstance.data.datasets[0].data = [counts.INFO, counts.WARN, counts.ERROR, counts.CRITICAL];
+        chartInstance.update();
+    }
+
+    // 7. Status & Alert Helpers
+    function updateConnectionStatus(isConnected) {
+        const statusEl = document.getElementById('connectionStatus');
+        if (isConnected) {
+            statusEl.className = 'flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> Connected to API`;
+        } else {
+            statusEl.className = 'flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20';
+            statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-400"></span> API Disconnected`;
+        }
+    }
+
+    function showAlert(msg) {
+        document.getElementById('anomalyMessage').innerText = msg;
+        document.getElementById('anomalyBanner').classList.remove('hidden');
+    }
+
+    function dismissAlert() {
+        document.getElementById('anomalyBanner').classList.add('hidden');
+    }
+</script>
+</body>
+</html>
